@@ -10,8 +10,8 @@
 // 5. Сохраните файл
 // ─────────────────────────────────────────────────────────────
 
-const SUPABASE_URL  = 'PASTE_YOUR_URL_HERE';
-const SUPABASE_KEY  = 'PASTE_YOUR_KEY_HERE';
+const SUPABASE_URL  = 'https://mlkntyfuvasoqdmvyofz.supabase.co';
+const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1sa250eWZ1dmFzb3FkbXZ5b2Z6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MjAzNzIsImV4cCI6MjA5NTE5NjM3Mn0.-uFHcIrVd_b2k-Q3E8_2ot2932EwFq__z6CONv4dOps';
 
 // Не трогайте строки ниже
 const sbEnabled = SUPABASE_URL !== 'PASTE_YOUR_URL_HERE' && SUPABASE_KEY !== 'PASTE_YOUR_KEY_HERE';
