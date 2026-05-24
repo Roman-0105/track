@@ -475,7 +475,9 @@ const App = (() => {
   function updateDriverMapMarkers() {
     const map = state.maps.driver;
     if (!map || !state.activeOrderId) return;
-    map.eachLayer(l => { if (l instanceof L.Marker || l instanceof L.Polyline || l instanceof L.Circle) map.removeLayer(l); });
+    const _drvLayers = [];
+    map.eachLayer(l => { if (l instanceof L.Marker || l instanceof L.Polyline || l instanceof L.Circle) _drvLayers.push(l); });
+    _drvLayers.forEach(l => map.removeLayer(l));
 
     const order = Data.getOrderById(state.activeOrderId);
     const visits = Data.getVisitsByOrder(state.activeOrderId);
@@ -534,8 +536,10 @@ const App = (() => {
     const map = state.maps.dispatcher;
     if (!map) return;
 
-    // Clear old layers (keep tile)
-    map.eachLayer(l => { if (l instanceof L.Marker || l instanceof L.CircleMarker || l instanceof L.Circle) map.removeLayer(l); });
+    // Clear old layers (safe collect-then-remove to avoid eachLayer mutation bug)
+    const _dispLayers = [];
+    map.eachLayer(l => { if (l instanceof L.Marker || l instanceof L.CircleMarker || l instanceof L.Circle) _dispLayers.push(l); });
+    _dispLayers.forEach(l => map.removeLayer(l));
 
     const sites = Data.getSites();
     const visits = Data.getVisits();
@@ -579,7 +583,7 @@ const App = (() => {
       });
       const m = L.marker([v.lat, v.lng], { icon: truckIcon });
       const statusTxt = { idle: 'Простой', en_route: 'В пути', at_site: 'На объекте' }[v.status] || v.status;
-      m.bindPopup(`<b>${v.number}</b> (${v.model})<br>Водитель: ${driver ? driver.name : '—'}<br>Статус: <b>${statusTxt}</b><br>Топливо: ${v.fuel}%<br>Скорость: ${v.speed} км/ч`);
+      m.bindPopup(`<b>${v.number}</b> (${v.model})<br>Водитель: ${driver ? driver.name : '—'}<br>Статус: <b>${statusTxt}</b>`);
       m.addTo(map);
       state.vehicleMarkers[v.id] = m;
     });
@@ -593,7 +597,7 @@ const App = (() => {
     const statusColor = { idle: '#9E9E9E', en_route: '#1565C0', at_site: '#43A047' };
     el.innerHTML = vehicles.map(v => {
       const driver = Data.getUserById(v.driverId);
-      return `<div class="vehicle-row">
+      return `<div class="vehicle-row" onclick="App.panToVehicle('${v.id}')" style="cursor:pointer" title="Найти на карте">
         <span class="vehicle-icon">🚛</span>
         <div class="vehicle-info">
           <div class="vnum">${v.number}</div>
@@ -941,7 +945,9 @@ const App = (() => {
   function renderManagerMapLayers() {
     const map = state.maps.manager;
     if (!map) return;
-    map.eachLayer(l => { if (l instanceof L.Marker || l instanceof L.CircleMarker) map.removeLayer(l); });
+    const _mgrLayers = [];
+    map.eachLayer(l => { if (l instanceof L.Marker || l instanceof L.CircleMarker) _mgrLayers.push(l); });
+    _mgrLayers.forEach(l => map.removeLayer(l));
 
     const sites = Data.getSites();
     const visits = Data.getVisits();
@@ -1096,6 +1102,7 @@ const App = (() => {
     } else if (state.user.role === 'dispatcher') {
       renderDispatcherOrders();
       renderViolations();
+      renderVehiclePanel();
       if (state.maps.dispatcher) renderDispatcherMapLayers();
     } else if (state.user.role === 'manager') {
       renderStats();
@@ -1120,6 +1127,22 @@ const App = (() => {
         body: `Наряд №${order.number} · ${order.district} район`
       });
     }
+  }
+
+  function panToVehicle(vehicleId) {
+    const vehicle = Data.getVehicleById(vehicleId);
+    if (!vehicle) return;
+    if (!state.maps.dispatcher) initDispatcherMap();
+    showTab('dispatcher', 'disp-map');
+    document.querySelectorAll('#screen-dispatcher .tab-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === 'disp-map');
+    });
+    setTimeout(() => {
+      state.maps.dispatcher.invalidateSize();
+      state.maps.dispatcher.setView([vehicle.lat, vehicle.lng], 16, { animate: true });
+      const marker = state.vehicleMarkers[vehicleId];
+      if (marker) marker.openPopup();
+    }, 150);
   }
 
   function exportExcel() {
@@ -1225,7 +1248,8 @@ const App = (() => {
     generateReport,
     printReport,
     exportCSV,
-    exportExcel
+    exportExcel,
+    panToVehicle
   };
 })();
 
