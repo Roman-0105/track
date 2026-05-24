@@ -13,17 +13,19 @@ CREATE TABLE IF NOT EXISTS app_data (
 -- 2. Включаем Row Level Security (RLS)
 ALTER TABLE app_data ENABLE ROW LEVEL SECURITY;
 
--- 3. Разрешаем чтение всем (anon-ключ)
+-- 3. Политики (пересоздаём если уже существуют)
+DROP POLICY IF EXISTS "Allow public read"   ON app_data;
+DROP POLICY IF EXISTS "Allow public insert" ON app_data;
+DROP POLICY IF EXISTS "Allow public update" ON app_data;
+
 CREATE POLICY "Allow public read"
   ON app_data FOR SELECT
   USING (true);
 
--- 4. Разрешаем запись всем (anon-ключ)
 CREATE POLICY "Allow public insert"
   ON app_data FOR INSERT
   WITH CHECK (true);
 
--- 5. Разрешаем обновление всем (anon-ключ)
 CREATE POLICY "Allow public update"
   ON app_data FOR UPDATE
   USING (true);
@@ -35,16 +37,15 @@ CREATE POLICY "Allow public update"
 --  Public bucket: YES (включить публичный доступ)
 -- ═══════════════════════════════════════════════════════════
 
--- Политика для Storage (запускать отдельно если нужно)
--- INSERT INTO storage.buckets (id, name, public) VALUES ('tbo-photos', 'tbo-photos', true);
+-- Политики Storage (пересоздаём если уже существуют)
+DROP POLICY IF EXISTS "Allow photo upload" ON storage.objects;
+DROP POLICY IF EXISTS "Allow photo read"   ON storage.objects;
 
--- Разрешить загрузку файлов
 CREATE POLICY "Allow photo upload"
   ON storage.objects FOR INSERT
   TO anon
   WITH CHECK (bucket_id = 'tbo-photos');
 
--- Разрешить просмотр фотографий
 CREATE POLICY "Allow photo read"
   ON storage.objects FOR SELECT
   TO anon
