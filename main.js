@@ -367,18 +367,27 @@ const App = (() => {
     const file = input.files[0];
     const reader = new FileReader();
     reader.onload = (e) => {
-      // Compress photo
       const img = new Image();
-      img.onload = () => {
+      img.onload = async () => {
+        // Максимальное сжатие: 900px по длинной стороне, JPEG 0.55
         const canvas = document.createElement('canvas');
-        const maxW = 800;
-        const scale = Math.min(1, maxW / img.width);
-        canvas.width = img.width * scale;
-        canvas.height = img.height * scale;
+        const maxW = 900;
+        const scale = Math.min(1, maxW / Math.max(img.width, img.height));
+        canvas.width  = Math.round(img.width  * scale);
+        canvas.height = Math.round(img.height * scale);
         canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.55);
+
+        toast(`📤 Загрузка фото...`, '');
+
+        // Загружаем в Supabase Storage (если настроен), иначе base64
+        const photoUrl = await SupabaseSync.uploadPhoto(
+          dataUrl,
+          `${state.activeOrderId}_${state.activeSiteId}_${type}`
+        );
+
         const updates = {};
-        updates[type === 'before' ? 'photoBefore' : 'photoAfter'] = dataUrl;
+        updates[type === 'before' ? 'photoBefore' : 'photoAfter'] = photoUrl;
         Data.updateVisit(visit.id, updates);
 
         if (type === 'after' && !visit.photoBefore) {
@@ -969,7 +978,7 @@ const App = (() => {
     const el = document.getElementById('report-content');
     el.innerHTML = `
       <div style="font-size:17px;font-weight:800;margin-bottom:4px">Суточный отчёт — ${new Date(date + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
-      <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px">ТОО «L Trading» · г. Рудный · Составлен: ${new Date().toLocaleString('ru-RU')}</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px">г. Рудный · Составлен: ${new Date().toLocaleString('ru-RU')}</div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:20px">
         ${[
@@ -1121,4 +1130,10 @@ const App = (() => {
   };
 })();
 
-document.addEventListener('DOMContentLoaded', App.init);
+document.addEventListener('DOMContentLoaded', () => {
+  // Загружаем данные из Supabase (если настроен), потом запускаем приложение
+  SupabaseSync.init(() => {
+    App.init();
+    SupabaseSync.startPolling();
+  });
+});
