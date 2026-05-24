@@ -6,7 +6,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#1565C0">
-  <title>ТБО Мониторинг — L Trading</title>
+  <title>ТБО Мониторинг</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="app.css">
 </head>
@@ -18,7 +18,7 @@
     <div class="login-logo">
       <div class="logo-icon">🚛</div>
       <h1>ТБО Мониторинг</h1>
-      <p>ТОО «L Trading» · г. Рудный</p>
+      <p>Система мониторинга · г. Рудный</p>
     </div>
     <div class="form-group">
       <label>Логин</label>
@@ -49,7 +49,7 @@
     <span class="header-logo">🚛</span>
     <div style="flex:1">
       <h2 id="driver-header-title">Мои наряды</h2>
-      <div class="header-sub" id="driver-header-sub">ТОО «L Trading»</div>
+      <div class="header-sub" id="driver-header-sub">ТБО Мониторинг</div>
     </div>
     <div class="header-user">
       <div class="avatar" id="driver-avatar">А</div>
@@ -147,7 +147,7 @@
     <span class="header-logo">🖥️</span>
     <div style="flex:1">
       <h2>Диспетчерская панель</h2>
-      <div class="header-sub">ТОО «L Trading» · г. Рудный</div>
+      <div class="header-sub">Система мониторинга · г. Рудный</div>
     </div>
     <div class="header-user">
       <div class="avatar" id="dispatcher-avatar">Д</div>
@@ -268,7 +268,7 @@
     <span class="header-logo">📊</span>
     <div style="flex:1">
       <h2>Панель руководителя</h2>
-      <div class="header-sub">ТОО «L Trading» · г. Рудный</div>
+      <div class="header-sub">Система мониторинга · г. Рудный</div>
     </div>
     <div class="header-user">
       <div class="avatar" id="manager-avatar">Р</div>
@@ -400,7 +400,10 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabase-config.js"></script>
 <script src="data.js"></script>
+<script src="supabase-sync.js"></script>
 <script src="main.js"></script>
 </body>
 </html>
