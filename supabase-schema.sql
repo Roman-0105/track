@@ -50,3 +50,10 @@ CREATE POLICY "Allow photo read"
   ON storage.objects FOR SELECT
   TO anon
   USING (bucket_id = 'tbo-photos');
+
+-- ═══════════════════════════════════════════════════════════
+--  Realtime — мгновенная синхронизация между устройствами
+--  Запустите эту строку ОТДЕЛЬНЫМ запросом если Realtime
+--  не работает (ошибки в консоли браузера)
+-- ═══════════════════════════════════════════════════════════
+-- ALTER PUBLICATION supabase_realtime ADD TABLE app_data;

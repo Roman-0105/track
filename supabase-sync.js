@@ -1,11 +1,8 @@
 'use strict';
 
-// ─────────────────────────────────────────────────────────────
-//  SupabaseSync — прозрачная синхронизация localStorage ↔ Supabase
-//  Все данные (наряды, визиты, нарушения, фото) автоматически
-//  сохраняются в облако и доступны на любом устройстве.
-// ─────────────────────────────────────────────────────────────
 const SupabaseSync = (() => {
+
+  let _lastPollAt = null;
 
   // Перехватываем Data._set → пишем в Supabase после каждого изменения
   const _orig = Data._set.bind(Data);
@@ -14,7 +11,7 @@ const SupabaseSync = (() => {
     if (sbEnabled) _upsert(key, val);
   };
 
-  // ── Запись таблицы в Supabase ────────────────────────────────
+  // ── Запись строки в Supabase ─────────────────────────────────
   async function _upsert(key, val) {
     try {
       await sb.from('app_data').upsert(
@@ -26,15 +23,14 @@ const SupabaseSync = (() => {
     }
   }
 
-  // ── Загрузка всех данных из Supabase в localStorage ──────────
+  // ── Загрузка всех данных (первый запуск) ─────────────────────
   async function loadFromCloud() {
     if (!sbEnabled) return false;
     try {
       const { data, error } = await sb.from('app_data').select('key, value');
       if (error || !data || !data.length) return false;
-      data.forEach(row => {
-        localStorage.setItem(row.key, JSON.stringify(row.value));
-      });
+      data.forEach(row => localStorage.setItem(row.key, JSON.stringify(row.value)));
+      _lastPollAt = new Date().toISOString();
       return true;
     } catch (e) {
       console.warn('[Supabase] load error:', e);
@@ -42,8 +38,27 @@ const SupabaseSync = (() => {
     }
   }
 
+  // ── Delta-polling: только изменённые строки ──────────────────
+  async function _pollChanges() {
+    if (!sbEnabled || !_lastPollAt) return;
+    try {
+      const since = new Date(new Date(_lastPollAt).getTime() - 500).toISOString();
+      _lastPollAt = new Date().toISOString();
+
+      const { data, error } = await sb.from('app_data')
+        .select('key, value')
+        .gt('updated_at', since);
+
+      if (error || !data || !data.length) return;
+
+      data.forEach(row => localStorage.setItem(row.key, JSON.stringify(row.value)));
+      window.dispatchEvent(new CustomEvent('tbo-sync', { detail: { keys: data.map(r => r.key) } }));
+    } catch (e) {
+      console.warn('[Supabase] poll error:', e);
+    }
+  }
+
   // ── Загрузка фото в Supabase Storage ─────────────────────────
-  // Принимает dataUrl (base64), возвращает публичный URL или null
   async function uploadPhoto(dataUrl, filename) {
     if (!sbEnabled) return dataUrl;
     try {
@@ -61,31 +76,44 @@ const SupabaseSync = (() => {
       return publicUrl;
     } catch (e) {
       console.warn('[Supabase Storage] error:', e);
-      return dataUrl; // fallback: base64 остаётся локально
+      return dataUrl;
     }
   }
 
-  // ── Инициализация: загружаем из облака, потом запускаем app ──
+  // ── Инициализация ─────────────────────────────────────────────
   async function init(callback) {
     if (sbEnabled) {
       const loaded = await loadFromCloud();
       if (loaded) console.info('[Supabase] данные загружены из облака');
       else         console.info('[Supabase] облако пусто — используем локальные данные');
     }
-    callback(); // запустить App.init()
+    callback();
   }
 
-  // ── Периодическое обновление данных (polling каждые 30 сек) ──
+  // ── Realtime-подписка (мгновенные обновления) ─────────────────
+  function startRealtime() {
+    if (!sbEnabled) return;
+    sb.channel('app_data_rt')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'app_data' },
+        payload => {
+          if (payload.new && payload.new.key) {
+            localStorage.setItem(payload.new.key, JSON.stringify(payload.new.value));
+            window.dispatchEvent(new CustomEvent('tbo-sync', { detail: { keys: [payload.new.key] } }));
+            console.info('[Supabase RT] обновление:', payload.new.key);
+          }
+        }
+      )
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED') console.info('[Supabase RT] Realtime подключён');
+      });
+  }
+
+  // ── Polling каждые 3 секунды (резервный канал) ───────────────
   function startPolling() {
     if (!sbEnabled) return;
-    setInterval(async () => {
-      const loaded = await loadFromCloud();
-      if (loaded) {
-        // Тихое обновление UI без полного перезапуска
-        console.info('[Supabase] фоновое обновление данных');
-      }
-    }, 30000);
+    setInterval(_pollChanges, 3000);
   }
 
-  return { init, uploadPhoto, startPolling };
+  return { init, uploadPhoto, startRealtime, startPolling };
 })();

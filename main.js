@@ -16,7 +16,11 @@ const App = (() => {
     driverMapLine: null,
     simInterval: null,
     chartWeek: null,
-    chartStatus: null
+    chartStatus: null,
+    gpsTrack: [],
+    knownOrderIds: new Set(),
+    dispHeatLayer: null,
+    mgrHeatLayer: null
   };
 
   // ─── Utils ────────────────────────────────────────────────
@@ -117,6 +121,8 @@ const App = (() => {
     showScreen('driver');
     renderDriverOrders();
     startGPS();
+    if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+    Data.getOrdersByDriver(user.id).forEach(o => state.knownOrderIds.add(o.id));
 
     // auto-select active order
     const orders = Data.getOrdersByDriver(user.id);
@@ -168,6 +174,7 @@ const App = (() => {
     }
 
     state.activeOrderId = orderId;
+    state.gpsTrack = [];
     const visits = Data.getVisitsByOrder(orderId);
     const cur = visits.find(v => v.status === 'in_progress') || visits.find(v => v.status === 'pending');
     state.activeSiteId = cur ? cur.siteId : null;
@@ -416,6 +423,7 @@ const App = (() => {
         document.getElementById('gps-coords').textContent = `${state.gpsLat.toFixed(4)}, ${state.gpsLng.toFixed(4)}`;
         document.getElementById('gps-dot').style.background = 'var(--success)';
 
+        if (state.activeOrderId) state.gpsTrack.push([state.gpsLat, state.gpsLng]);
         if (state.user && state.user.vehicleId) {
           Data.updateVehicle(state.user.vehicleId, { lat: state.gpsLat, lng: state.gpsLng });
         }
@@ -488,6 +496,9 @@ const App = (() => {
 
     if (coords.length > 1) L.polyline(coords, { color: '#1565C0', weight: 3, dashArray: '8,4', opacity: 0.7 }).addTo(map);
 
+    if (state.gpsTrack.length > 1) {
+      L.polyline(state.gpsTrack, { color: '#E91E63', weight: 3, opacity: 0.8 }).addTo(map);
+    }
     if (state.gpsLat) {
       const truckIcon = L.divIcon({ html: '<div style="font-size:24px;line-height:1">🚛</div>', iconSize: [30, 30], iconAnchor: [15, 15], className: '' });
       L.marker([state.gpsLat, state.gpsLng], { icon: truckIcon }).addTo(map).bindTooltip('Ваше положение');
@@ -544,6 +555,12 @@ const App = (() => {
       marker.addTo(map);
     });
 
+    if (state.dispHeatLayer) { map.removeLayer(state.dispHeatLayer); state.dispHeatLayer = null; }
+    const dispViolations = Data.getViolations();
+    if (dispViolations.length && typeof L.heatLayer !== 'undefined') {
+      const pts = dispViolations.map(v => { const s = Data.getSiteById(v.siteId); return s ? [s.lat, s.lng, 1] : null; }).filter(Boolean);
+      if (pts.length) state.dispHeatLayer = L.heatLayer(pts, { radius: 35, blur: 25, maxZoom: 17, gradient: { 0.4: '#FFC107', 0.7: '#FF5722', 1: '#B71C1C' } }).addTo(map);
+    }
     // Vehicles
     renderVehicleMarkers(map);
     renderVehiclePanel();
@@ -951,6 +968,12 @@ const App = (() => {
       });
       L.marker([v.lat, v.lng], { icon }).bindPopup(`<b>${v.number}</b><br>${driver ? driver.name : '—'}`).addTo(map);
     });
+    if (state.mgrHeatLayer) { map.removeLayer(state.mgrHeatLayer); state.mgrHeatLayer = null; }
+    const mgrViolations = Data.getViolations();
+    if (mgrViolations.length && typeof L.heatLayer !== 'undefined') {
+      const pts = mgrViolations.map(v => { const s = Data.getSiteById(v.siteId); return s ? [s.lat, s.lng, 1] : null; }).filter(Boolean);
+      if (pts.length) state.mgrHeatLayer = L.heatLayer(pts, { radius: 35, blur: 25, maxZoom: 17, gradient: { 0.4: '#FFC107', 0.7: '#FF5722', 1: '#B71C1C' } }).addTo(map);
+    }
   }
 
   // ─── Report ───────────────────────────────────────────────
@@ -1063,6 +1086,75 @@ const App = (() => {
     toast('📊 CSV файл скачан', 'success');
   }
 
+  // ─── Real-time UI refresh ────────────────────────────────
+  function refreshUI(keys) {
+    if (!state.user) return;
+    if (state.user.role === 'driver') {
+      renderDriverOrders();
+      renderDriverActive();
+      if (!keys || keys.includes('tbo_orders')) _checkNewOrders();
+    } else if (state.user.role === 'dispatcher') {
+      renderDispatcherOrders();
+      renderViolations();
+      if (state.maps.dispatcher) renderDispatcherMapLayers();
+    } else if (state.user.role === 'manager') {
+      renderStats();
+      renderKPI();
+    }
+  }
+
+  function _checkNewOrders() {
+    if (!state.user) return;
+    Data.getOrdersByDriver(state.user.id).forEach(order => {
+      if (!state.knownOrderIds.has(order.id)) {
+        state.knownOrderIds.add(order.id);
+        if (order.status === 'pending') _notifyNewOrder(order);
+      }
+    });
+  }
+
+  function _notifyNewOrder(order) {
+    toast(`🔔 Новый наряд №${order.number} · ${order.district}`, 'success', 6000);
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('ТБО Мониторинг — Новый наряд!', {
+        body: `Наряд №${order.number} · ${order.district} район`
+      });
+    }
+  }
+
+  function exportExcel() {
+    if (typeof XLSX === 'undefined') { toast('⚠️ Excel недоступен — перезагрузите страницу', 'warning'); return; }
+    const date = document.getElementById('report-date').value || new Date().toISOString().split('T')[0];
+    const orders = Data.getOrders().filter(o => o.date === date);
+    const visits = Data.getVisits();
+    const rows = [['Наряд', 'Район', 'Водитель', 'ТС', 'Площадка', 'Адрес', 'Статус', 'Прибыл', 'Выполнен', 'Фото']];
+    orders.forEach(o => {
+      const driver = Data.getUserById(o.driverId);
+      const vehicle = Data.getVehicleById(o.vehicleId);
+      o.sites.forEach(siteId => {
+        const site = Data.getSiteById(siteId);
+        const visit = visits.find(v => v.orderId === o.id && v.siteId === siteId);
+        rows.push([
+          `№${o.number}`, o.district,
+          driver ? driver.name : '', vehicle ? vehicle.number : '',
+          site ? site.name : siteId, site ? site.address : '',
+          statusLabel(visit ? visit.status : 'pending'),
+          fmt(visit ? visit.arrivedAt : null), fmt(visit ? visit.completedAt : null),
+          visit && (visit.photoBefore || visit.photoAfter) ? 'Да' : 'Нет'
+        ]);
+      });
+    });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 10 }, { wch: 12 }, { wch: 22 }, { wch: 12 },
+      { wch: 28 }, { wch: 32 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 6 }
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Отчёт');
+    XLSX.writeFile(wb, `tbo-report-${date}.xlsx`);
+    toast('📗 Excel файл скачан', 'success');
+  }
+
   // ─── Tab wiring ───────────────────────────────────────────
   function initTabs() {
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1109,6 +1201,12 @@ const App = (() => {
       state.user = session;
       initRole(session);
     }
+
+    let _syncDebounce = null;
+    window.addEventListener('tbo-sync', e => {
+      clearTimeout(_syncDebounce);
+      _syncDebounce = setTimeout(() => refreshUI(e.detail && e.detail.keys), 300);
+    });
   }
 
   return {
@@ -1126,14 +1224,15 @@ const App = (() => {
     resetOrderForm,
     generateReport,
     printReport,
-    exportCSV
+    exportCSV,
+    exportExcel
   };
 })();
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Загружаем данные из Supabase (если настроен), потом запускаем приложение
   SupabaseSync.init(() => {
     App.init();
+    SupabaseSync.startRealtime();
     SupabaseSync.startPolling();
   });
 });

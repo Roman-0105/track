@@ -347,7 +347,8 @@
         </div>
         <div class="card-header" style="border-top:1px solid var(--border);border-bottom:none;justify-content:flex-end">
           <button class="btn btn-outline btn-sm" onclick="App.printReport()">🖨️ Печать</button>
-          <button class="btn btn-success btn-sm" onclick="App.exportCSV()">📊 Экспорт CSV</button>
+          <button class="btn btn-outline btn-sm" onclick="App.exportCSV()">📊 CSV</button>
+          <button class="btn btn-success btn-sm" onclick="App.exportExcel()">📗 Excel</button>
         </div>
       </div>
     </div>
@@ -399,11 +400,13 @@
 <div id="toast"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="supabase-config.js"></script>
 <script src="data.js"></script>
 <script src="supabase-sync.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
 <script src="main.js"></script>
 </body>
 </html>
