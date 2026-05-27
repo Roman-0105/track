@@ -410,6 +410,22 @@ const App = (() => {
     input.value = '';
   }
 
+  // ─── GPS helpers ─────────────────────────────────────────
+  function _gpsAgeText(isoStr) {
+    if (!isoStr) return '— нет GPS';
+    const sec = Math.floor((Date.now() - new Date(isoStr)) / 1000);
+    if (sec < 60)   return `${sec}с`;
+    if (sec < 3600) return `${Math.floor(sec / 60)}м`;
+    return `${Math.floor(sec / 3600)}ч`;
+  }
+  function _gpsFreshColor(isoStr) {
+    if (!isoStr) return '#9E9E9E';
+    const sec = Math.floor((Date.now() - new Date(isoStr)) / 1000);
+    if (sec < 5)  return '#43A047';  // зелёный — свежий
+    if (sec < 30) return '#FB8C00';  // оранжевый — недавний
+    return '#E53935';                // красный — устаревший
+  }
+
   // ─── GPS ──────────────────────────────────────────────────
   function startGPS() {
     if (!navigator.geolocation) {
@@ -420,13 +436,14 @@ const App = (() => {
       pos => {
         state.gpsLat = pos.coords.latitude;
         state.gpsLng = pos.coords.longitude;
-        document.getElementById('gps-status').textContent = `GPS: активен (±${Math.round(pos.coords.accuracy)}м)`;
+        const speedKmh = pos.coords.speed != null ? Math.round(pos.coords.speed * 3.6) : 0;
+        document.getElementById('gps-status').textContent = `GPS: активен (±${Math.round(pos.coords.accuracy)}м)${speedKmh > 0 ? ' · ' + speedKmh + ' км/ч' : ''}`;
         document.getElementById('gps-coords').textContent = `${state.gpsLat.toFixed(4)}, ${state.gpsLng.toFixed(4)}`;
         document.getElementById('gps-dot').style.background = 'var(--success)';
 
         if (state.activeOrderId) state.gpsTrack.push([state.gpsLat, state.gpsLng]);
         if (state.user && state.user.vehicleId) {
-          Data.updateVehicle(state.user.vehicleId, { lat: state.gpsLat, lng: state.gpsLng });
+          Data.updateVehicle(state.user.vehicleId, { lat: state.gpsLat, lng: state.gpsLng, speed: speedKmh, lastGpsAt: new Date().toISOString() });
         }
         updateDriverMapMarkers();
         checkGeofences();
@@ -577,14 +594,27 @@ const App = (() => {
     const vehicles = Data.getVehicles();
     vehicles.forEach(v => {
       const driver = Data.getUserById(v.driverId);
+      const color = v.status === 'idle' ? '#9E9E9E' : v.status === 'at_site' ? '#43A047' : '#1565C0';
+      const gpsAge = _gpsAgeText(v.lastGpsAt);
+      const gpsDot = _gpsFreshColor(v.lastGpsAt);
+      const speedPart = (v.speed > 0) ? `<span>${v.speed}км/ч</span><span>·</span>` : '';
       const truckIcon = L.divIcon({
-        html: `<div style="background:${v.status === 'idle' ? '#9E9E9E' : v.status === 'at_site' ? '#43A047' : '#1565C0'};color:#fff;border-radius:8px;padding:2px 6px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.3)">🚛 ${v.number}</div>`,
+        html: `<div style="background:${color};color:#fff;border-radius:8px;padding:3px 7px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.35);line-height:1.4">
+          <div>🚛 ${v.number}</div>
+          <div style="font-size:9px;display:flex;align-items:center;gap:3px;margin-top:1px;opacity:0.92">
+            ${speedPart}<span>GPS:${gpsAge}</span>
+            <span style="width:6px;height:6px;border-radius:50%;background:${gpsDot};display:inline-block;flex-shrink:0"></span>
+          </div>
+        </div>`,
         className: '',
-        iconAnchor: [30, 14]
+        iconAnchor: [40, 24]
       });
       const m = L.marker([v.lat, v.lng], { icon: truckIcon });
       const statusTxt = { idle: 'Простой', en_route: 'В пути', at_site: 'На объекте' }[v.status] || v.status;
-      m.bindPopup(`<b>${v.number}</b> (${v.model})<br>Водитель: ${driver ? driver.name : '—'}<br>Статус: <b>${statusTxt}</b>`);
+      const lastGpsFormatted = v.lastGpsAt
+        ? new Date(v.lastGpsAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        : '—';
+      m.bindPopup(`<b>${v.number}</b> (${v.model})<br>Водитель: ${driver ? driver.name : '—'}<br>Статус: <b>${statusTxt}</b><br>Скорость: <b>${v.speed || 0} км/ч</b><br>Последний GPS: <b>${lastGpsFormatted}</b>`);
       m.addTo(map);
       state.vehicleMarkers[v.id] = m;
     });
@@ -629,7 +659,7 @@ const App = (() => {
         const dlat = (site.lat - v.lat) * 0.08 + (Math.random() - 0.5) * 0.0002;
         const dlng = (site.lng - v.lng) * 0.08 + (Math.random() - 0.5) * 0.0002;
         const speed = Math.round(20 + Math.random() * 20);
-        Data.updateVehicle(v.id, { lat: v.lat + dlat, lng: v.lng + dlng, speed, status: 'en_route' });
+        Data.updateVehicle(v.id, { lat: v.lat + dlat, lng: v.lng + dlng, speed, status: 'en_route', lastGpsAt: new Date().toISOString() });
       });
 
       // Update map markers
