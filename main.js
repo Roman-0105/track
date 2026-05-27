@@ -438,7 +438,7 @@ const App = (() => {
         document.getElementById('gps-status').textContent = 'GPS: симуляция (демо)';
         document.getElementById('gps-coords').textContent = `${state.gpsLat.toFixed(4)}, ${state.gpsLng.toFixed(4)}`;
       },
-      { enableHighAccuracy: true, maximumAge: 15000, timeout: 10000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
     );
   }
 
