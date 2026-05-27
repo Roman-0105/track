@@ -16,6 +16,7 @@ function genId() {
 
 function seedDatabase() {
   const users = [
+    { id: 'u0', name: 'Администратор', role: 'admin', username: 'admin', password: 'admin' },
     { id: 'u1', name: 'Жаксыбекова Айгерим', role: 'dispatcher', username: 'dispatcher', password: '1234' },
     { id: 'u2', name: 'Ахметов Дулат (Директор)', role: 'manager', username: 'manager', password: '1234' },
     { id: 'u3', name: 'Петров Алексей', role: 'driver', username: 'driver1', password: '1234', vehicleId: 'v1' },
@@ -102,7 +103,15 @@ function seedDatabase() {
 
 const Data = {
   init() {
-    if (!localStorage.getItem(DB_KEYS.USERS)) seedDatabase();
+    if (!localStorage.getItem(DB_KEYS.USERS)) {
+      seedDatabase();
+    } else {
+      const users = this.getUsers();
+      if (!users.find(u => u.role === 'admin')) {
+        users.push({ id: 'u0', name: 'Администратор', role: 'admin', username: 'admin', password: 'admin' });
+        this._set(DB_KEYS.USERS, users);
+      }
+    }
   },
 
   reset() {
@@ -162,6 +171,56 @@ const Data = {
     const list = this._get(DB_KEYS.ORDERS);
     const i = list.findIndex(o => o.id === id);
     if (i !== -1) { list[i] = { ...list[i], ...updates }; this._set(DB_KEYS.ORDERS, list); }
+  },
+  deleteOrder(id) {
+    this._set(DB_KEYS.ORDERS, this._get(DB_KEYS.ORDERS).filter(o => o.id !== id));
+    this._set(DB_KEYS.VISITS, this._get(DB_KEYS.VISITS).filter(v => v.orderId !== id));
+  },
+
+  // User CRUD
+  addUser(user) {
+    const list = this._get(DB_KEYS.USERS);
+    user.id = 'u' + genId();
+    list.push(user);
+    this._set(DB_KEYS.USERS, list);
+    return user;
+  },
+  updateUser(id, updates) {
+    const list = this._get(DB_KEYS.USERS);
+    const i = list.findIndex(u => u.id === id);
+    if (i !== -1) { list[i] = { ...list[i], ...updates }; this._set(DB_KEYS.USERS, list); }
+  },
+  deleteUser(id) {
+    this._set(DB_KEYS.USERS, this._get(DB_KEYS.USERS).filter(u => u.id !== id));
+  },
+
+  // Vehicle CRUD
+  addVehicle(vehicle) {
+    const list = this._get(DB_KEYS.VEHICLES);
+    vehicle.id = 'v' + genId();
+    list.push(vehicle);
+    this._set(DB_KEYS.VEHICLES, list);
+    return vehicle;
+  },
+  deleteVehicle(id) {
+    this._set(DB_KEYS.VEHICLES, this._get(DB_KEYS.VEHICLES).filter(v => v.id !== id));
+  },
+
+  // Site CRUD
+  addSite(site) {
+    const list = this._get(DB_KEYS.SITES);
+    site.id = 's' + genId();
+    list.push(site);
+    this._set(DB_KEYS.SITES, list);
+    return site;
+  },
+  updateSite(id, updates) {
+    const list = this._get(DB_KEYS.SITES);
+    const i = list.findIndex(s => s.id === id);
+    if (i !== -1) { list[i] = { ...list[i], ...updates }; this._set(DB_KEYS.SITES, list); }
+  },
+  deleteSite(id) {
+    this._set(DB_KEYS.SITES, this._get(DB_KEYS.SITES).filter(s => s.id !== id));
   },
 
   // Visits
