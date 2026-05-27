@@ -20,7 +20,9 @@ const App = (() => {
     gpsTrack: [],
     knownOrderIds: new Set(),
     dispHeatLayer: null,
-    mgrHeatLayer: null
+    mgrHeatLayer: null,
+    gpsDiagInterval: null,
+    gpsLog: []
   };
 
   // ─── Utils ────────────────────────────────────────────────
@@ -437,23 +439,30 @@ const App = (() => {
         state.gpsLat = pos.coords.latitude;
         state.gpsLng = pos.coords.longitude;
         const speedKmh = pos.coords.speed != null ? Math.round(pos.coords.speed * 3.6) : 0;
-        document.getElementById('gps-status').textContent = `GPS: активен (±${Math.round(pos.coords.accuracy)}м)${speedKmh > 0 ? ' · ' + speedKmh + ' км/ч' : ''}`;
+        const acc = Math.round(pos.coords.accuracy);
+        document.getElementById('gps-status').textContent = `GPS: активен (±${acc}м)${speedKmh > 0 ? ' · ' + speedKmh + ' км/ч' : ''}`;
         document.getElementById('gps-coords').textContent = `${state.gpsLat.toFixed(4)}, ${state.gpsLng.toFixed(4)}`;
         document.getElementById('gps-dot').style.background = 'var(--success)';
 
         if (state.activeOrderId) state.gpsTrack.push([state.gpsLat, state.gpsLng]);
         if (state.user && state.user.vehicleId) {
+          const veh = Data.getVehicleById ? Data.getVehicleById(state.user.vehicleId) : null;
           Data.updateVehicle(state.user.vehicleId, { lat: state.gpsLat, lng: state.gpsLng, speed: speedKmh, lastGpsAt: new Date().toISOString() });
+          const vNum = veh ? veh.number : state.user.vehicleId;
+          _gpsLogEntry(`📍 ${vNum}: ${state.gpsLat.toFixed(5)}, ${state.gpsLng.toFixed(5)} · ±${acc}м${speedKmh > 0 ? ' · ' + speedKmh + 'км/ч' : ''}`, 'ok');
+        } else {
+          _gpsLogEntry(`📍 GPS: ${state.gpsLat.toFixed(5)}, ${state.gpsLng.toFixed(5)} · ±${acc}м (нет ТС)`, 'info');
         }
         updateDriverMapMarkers();
         checkGeofences();
       },
-      () => {
+      err => {
         // Fallback: simulate GPS in Rudny area
         state.gpsLat = 52.9578 + (Math.random() - 0.5) * 0.002;
         state.gpsLng = 63.1283 + (Math.random() - 0.5) * 0.002;
         document.getElementById('gps-status').textContent = 'GPS: симуляция (демо)';
         document.getElementById('gps-coords').textContent = `${state.gpsLat.toFixed(4)}, ${state.gpsLng.toFixed(4)}`;
+        _gpsLogEntry(`⚠️ GPS недоступен (${err.message}), используется симуляция`, 'warn');
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
     );
@@ -637,6 +646,136 @@ const App = (() => {
         <span style="font-size:11px;padding:2px 7px;background:${statusColor[v.status]}22;color:${statusColor[v.status]};border-radius:10px;font-weight:600">${statusTxt[v.status] || v.status}</span>
       </div>`;
     }).join('');
+  }
+
+  // ─── GPS Diagnostics ──────────────────────────────────────
+  function _gpsLogEntry(msg, type) {
+    const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    state.gpsLog.unshift({ time: now, msg, type }); // newest first
+    if (state.gpsLog.length > 100) state.gpsLog.length = 100;
+    const logEl = document.getElementById('gps-event-log');
+    if (logEl) _renderGpsLog(logEl);
+  }
+
+  function _renderGpsLog(el) {
+    if (!state.gpsLog.length) {
+      el.innerHTML = '<div style="padding:12px;color:var(--text-muted);text-align:center">Ожидание событий GPS...</div>';
+      return;
+    }
+    const colors = { ok: '#43A047', warn: '#FB8C00', err: '#E53935', info: '#1565C0' };
+    el.innerHTML = state.gpsLog.map(e =>
+      `<div style="padding:4px 14px;border-bottom:1px solid var(--border-color);display:flex;gap:8px;align-items:baseline">
+        <span style="color:var(--text-muted);min-width:56px">${e.time}</span>
+        <span style="width:8px;height:8px;border-radius:50%;background:${colors[e.type] || '#9E9E9E'};flex-shrink:0;margin-top:3px"></span>
+        <span>${e.msg}</span>
+      </div>`
+    ).join('');
+  }
+
+  function renderGpsDiag() {
+    const tableEl = document.getElementById('gps-diag-table');
+    const updEl   = document.getElementById('gps-diag-updated');
+    if (!tableEl) return;
+
+    const vehicles = Data.getVehicles();
+    const now = Date.now();
+    const updTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    if (updEl) updEl.textContent = `Обновлено: ${updTime}`;
+
+    if (!vehicles.length) {
+      tableEl.innerHTML = '<div class="empty-state"><div class="empty-icon">🚛</div><p>Нет техники в системе</p></div>';
+      return;
+    }
+
+    const rows = vehicles.map(v => {
+      const driver = Data.getUserById(v.driverId);
+      const driverName = driver ? driver.name : '— нет водителя —';
+
+      // GPS age
+      const sec = v.lastGpsAt ? Math.floor((now - new Date(v.lastGpsAt)) / 1000) : null;
+      let dotColor, statusLabel, ageText;
+      if (sec === null) {
+        dotColor = '#9E9E9E'; statusLabel = 'Нет данных'; ageText = '—';
+      } else if (sec < 5) {
+        dotColor = '#43A047'; statusLabel = 'Онлайн'; ageText = `${sec}с назад`;
+      } else if (sec < 30) {
+        dotColor = '#FB8C00'; statusLabel = 'Недавно'; ageText = `${sec}с назад`;
+      } else if (sec < 3600) {
+        dotColor = '#E53935'; statusLabel = 'Нет связи'; ageText = `${Math.floor(sec / 60)}м назад`;
+      } else {
+        dotColor = '#E53935'; statusLabel = 'Нет связи'; ageText = `${Math.floor(sec / 3600)}ч назад`;
+      }
+
+      const lastTime = v.lastGpsAt
+        ? new Date(v.lastGpsAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        : '—';
+      const coords = (v.lat && v.lng) ? `${v.lat.toFixed(4)}, ${v.lng.toFixed(4)}` : '—';
+      const speedStr = (v.speed > 0) ? `${v.speed} км/ч` : '0 км/ч';
+
+      // pulse animation for online
+      const pulse = sec !== null && sec < 5
+        ? 'animation:gps-pulse 1s infinite'
+        : '';
+
+      return `<tr>
+        <td style="padding:10px 14px;white-space:nowrap">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:12px;height:12px;border-radius:50%;background:${dotColor};flex-shrink:0;${pulse}"></span>
+            <div>
+              <div style="font-weight:700;font-size:13px">🚛 ${v.number}</div>
+              <div style="font-size:11px;color:var(--text-muted)">${v.model}</div>
+            </div>
+          </div>
+        </td>
+        <td style="padding:10px 14px">
+          <div style="font-size:13px">${driverName}</div>
+        </td>
+        <td style="padding:10px 14px">
+          <span style="padding:3px 9px;border-radius:10px;font-size:12px;font-weight:600;background:${dotColor}22;color:${dotColor}">${statusLabel}</span>
+        </td>
+        <td style="padding:10px 14px;font-size:12px">
+          <div style="font-weight:600">${lastTime}</div>
+          <div style="color:var(--text-muted);font-size:11px">${ageText}</div>
+        </td>
+        <td style="padding:10px 14px;font-size:12px">
+          <div style="font-weight:600">${speedStr}</div>
+        </td>
+        <td style="padding:10px 14px;font-size:11px;color:var(--text-muted);font-family:monospace">${coords}</td>
+      </tr>`;
+    }).join('');
+
+    tableEl.innerHTML = `<table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="background:var(--bg-secondary);font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">
+          <th style="padding:8px 14px;text-align:left;font-weight:600">ТС</th>
+          <th style="padding:8px 14px;text-align:left;font-weight:600">Водитель</th>
+          <th style="padding:8px 14px;text-align:left;font-weight:600">GPS статус</th>
+          <th style="padding:8px 14px;text-align:left;font-weight:600">Последний сигнал</th>
+          <th style="padding:8px 14px;text-align:left;font-weight:600">Скорость</th>
+          <th style="padding:8px 14px;text-align:left;font-weight:600">Координаты</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }
+
+  function startGpsDiag() {
+    if (state.gpsDiagInterval) return;
+    renderGpsDiag();
+    state.gpsDiagInterval = setInterval(renderGpsDiag, 1000);
+  }
+
+  function stopGpsDiag() {
+    if (state.gpsDiagInterval) {
+      clearInterval(state.gpsDiagInterval);
+      state.gpsDiagInterval = null;
+    }
+  }
+
+  function clearGpsLog() {
+    state.gpsLog = [];
+    const el = document.getElementById('gps-event-log');
+    if (el) _renderGpsLog(el);
   }
 
   function startVehicleSimulation() {
@@ -1488,6 +1627,7 @@ const App = (() => {
         if (tab === 'disp-map') { setTimeout(() => { initDispatcherMap(); state.maps.dispatcher && state.maps.dispatcher.invalidateSize(); }, 100); }
         if (tab === 'disp-orders') renderDispatcherOrders();
         if (tab === 'disp-violations') renderViolations();
+        if (tab === 'disp-gps') { startGpsDiag(); } else { stopGpsDiag(); }
         if (tab === 'mgr-map') { setTimeout(() => { initManagerMap(); state.maps.manager && state.maps.manager.invalidateSize(); }, 100); }
         if (tab === 'mgr-stats') renderStats();
         if (tab === 'mgr-kpi') renderKPI();
@@ -1548,7 +1688,8 @@ const App = (() => {
     adminAddVehicle, adminEditVehicle, adminDeleteVehicle,
     adminAddSite, adminEditSite, adminDeleteSite,
     adminDeleteOrder, adminChangeRole, adminChangeOrderStatus,
-    adminChangeVisitStatus, renderAdminVisitStatuses, adminFormSave
+    adminChangeVisitStatus, renderAdminVisitStatuses, adminFormSave,
+    clearGpsLog
   };
 })();
 
