@@ -491,3 +491,14 @@ textarea:focus { border-color: var(--primary); }
   .dispatcher-layout .map-wrap { height: 100%; min-height: auto; }
   .dispatcher-layout .side-panel { overflow-y: auto; }
 }
+
+/* ─── GPS Diagnostics ─────────────────────────────────── */
+@keyframes gps-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(1.4); }
+}
+
+#gps-diag-table table tbody tr:hover {
+  background: var(--bg-secondary);
+}
+#gps-event-log::-webkit-scrollbar { width: 4px; }

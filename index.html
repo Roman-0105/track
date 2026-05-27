@@ -169,6 +169,9 @@
     <button class="tab-btn" data-tab="disp-violations" data-screen="dispatcher">
       <span class="tab-icon">⚠️</span>Нарушения
     </button>
+    <button class="tab-btn" data-tab="disp-gps" data-screen="dispatcher">
+      <span class="tab-icon">📡</span>GPS
+    </button>
     <button class="tab-btn" data-tab="disp-admin-open" data-screen="dispatcher">
       <span class="tab-icon">⚙️</span>Управление
     </button>
@@ -262,6 +265,44 @@
   <div class="tab-content" id="tab-disp-violations">
     <div class="content-area" id="violations-list">
       <div class="empty-state"><div class="empty-icon">✅</div><p>Нарушений не зафиксировано</p></div>
+    </div>
+  </div>
+
+  <!-- Tab: GPS Diagnostics -->
+  <div class="tab-content" id="tab-disp-gps">
+    <div class="content-area">
+      <div class="card">
+        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
+          <h3>📡 Мониторинг GPS-связи</h3>
+          <span id="gps-diag-updated" style="font-size:11px;color:var(--text-muted)">обновляется...</span>
+        </div>
+        <div class="card-body" style="padding:0">
+          <!-- Legend -->
+          <div style="display:flex;gap:16px;padding:10px 16px;background:var(--bg-secondary);font-size:11px;border-bottom:1px solid var(--border-color);flex-wrap:wrap">
+            <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#43A047;margin-right:4px;vertical-align:middle"></span>Онлайн (< 5с)</span>
+            <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#FB8C00;margin-right:4px;vertical-align:middle"></span>Недавно (5–30с)</span>
+            <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#E53935;margin-right:4px;vertical-align:middle"></span>Нет связи (> 30с)</span>
+            <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#9E9E9E;margin-right:4px;vertical-align:middle"></span>Нет данных</span>
+          </div>
+          <!-- GPS table -->
+          <div id="gps-diag-table" style="overflow-x:auto">
+            <div class="empty-state"><div class="empty-icon">📡</div><p>Загрузка...</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- GPS event log -->
+      <div class="card" style="margin-top:12px">
+        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
+          <h3>📜 Лог GPS событий</h3>
+          <button class="btn btn-outline" style="font-size:11px;padding:4px 10px" onclick="App.clearGpsLog()">Очистить</button>
+        </div>
+        <div class="card-body" style="padding:0">
+          <div id="gps-event-log" style="max-height:220px;overflow-y:auto;font-size:12px;font-family:monospace">
+            <div style="padding:12px;color:var(--text-muted);text-align:center">Ожидание событий GPS...</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
