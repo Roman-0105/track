@@ -112,6 +112,7 @@ const App = (() => {
     if (user.role === 'driver') initDriver(user);
     else if (user.role === 'dispatcher') initDispatcher(user);
     else if (user.role === 'manager') initManager(user);
+    else if (user.role === 'admin') initAdmin(user);
   }
 
   // ─── DRIVER ───────────────────────────────────────────────
@@ -1092,6 +1093,267 @@ const App = (() => {
     toast('📊 CSV файл скачан', 'success');
   }
 
+  // ─── ADMIN PANEL ─────────────────────────────────────────
+  let _adminSaveFn = null;
+  const _ROLES = { driver: '🚗 Водитель', dispatcher: '🖥️ Диспетчер', manager: '📊 Руководитель', admin: '⚙️ Администратор' };
+
+  function initAdmin(user) {
+    document.getElementById('admin-avatar').textContent = user.name[0];
+    document.getElementById('admin-username').textContent = user.name;
+    const backBtn = document.getElementById('admin-back-btn');
+    if (backBtn) backBtn.style.display = user.role === 'dispatcher' ? '' : 'none';
+    showScreen('admin');
+    renderAdminPersonnel(); renderAdminVehicles(); renderAdminSites();
+    renderAdminOrders(); renderAdminRoles(); renderAdminStatuses();
+  }
+
+  function renderAdminPersonnel() {
+    const vehs = Data.getVehicles();
+    document.getElementById('admin-personnel-tbody').innerHTML = Data.getUsers().map(u => {
+      const veh = vehs.find(v => v.driverId === u.id);
+      return `<tr><td><b>${u.name}</b></td><td><code>${u.username}</code></td><td>${_ROLES[u.role]||u.role}</td><td>${veh?veh.number:'—'}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-outline btn-sm" onclick="App.adminEditUser('${u.id}')">✏️</button>
+          ${u.id!=='u0'?`<button class="btn btn-sm" style="background:#E53935;color:#fff;margin-left:4px" onclick="App.adminDeleteUser('${u.id}')">🗑️</button>`:''}
+        </td></tr>`;
+    }).join('');
+  }
+
+  function adminAddUser() {
+    _openAdminForm('+ Добавить сотрудника', _userFormHtml(), () => {
+      const d = _readUserForm(); if (!d) return;
+      const user = Data.addUser({ name: d.name, username: d.username, password: d.password, role: d.role });
+      if (d.vehicleId) { Data.updateVehicle(d.vehicleId, { driverId: user.id }); Data.updateUser(user.id, { vehicleId: d.vehicleId }); }
+      toast('✅ Сотрудник добавлен', 'success');
+      closeModal('modal-admin-form'); renderAdminPersonnel(); renderAdminRoles();
+    });
+  }
+
+  function adminEditUser(id) {
+    const u = Data.getUserById(id); if (!u) return;
+    const veh = Data.getVehicles().find(v => v.driverId === id);
+    _openAdminForm('✏️ Редактировать сотрудника', _userFormHtml(u, veh ? veh.id : ''), () => {
+      const d = _readUserForm(); if (!d) return;
+      const upd = { name: d.name, username: d.username, role: d.role, vehicleId: d.vehicleId || undefined };
+      if (d.password) upd.password = d.password;
+      Data.updateUser(id, upd);
+      if (d.vehicleId) Data.updateVehicle(d.vehicleId, { driverId: id });
+      toast('✅ Сохранено', 'success');
+      closeModal('modal-admin-form'); renderAdminPersonnel(); renderAdminRoles();
+    });
+  }
+
+  function adminDeleteUser(id) {
+    const u = Data.getUserById(id);
+    if (!u || !confirm(`Удалить "${u.name}"?`)) return;
+    Data.deleteUser(id); toast('Удалено', 'warning');
+    renderAdminPersonnel(); renderAdminRoles();
+  }
+
+  function _userFormHtml(u = {}, vehicleId = '') {
+    return `<div class="form-group"><label>Полное имя</label><input id="af-name" value="${u.name||''}" placeholder="Иванов Иван"></div>
+      <div class="form-group"><label>Логин</label><input id="af-login" value="${u.username||''}" placeholder="login"></div>
+      <div class="form-group"><label>Пароль${u.id?' (пусто = не менять)':''}</label><input id="af-pass" type="password" placeholder="${u.id?'••••':'пароль'}"></div>
+      <div class="form-group"><label>Роль</label><select id="af-role">${Object.entries(_ROLES).map(([v,l])=>`<option value="${v}"${u.role===v?' selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Привязать ТС</label><select id="af-vehicle"><option value="">— Нет —</option>${Data.getVehicles().map(v=>`<option value="${v.id}"${vehicleId===v.id?' selected':''}>${v.number} (${v.model})</option>`).join('')}</select></div>`;
+  }
+
+  function _readUserForm() {
+    const name = document.getElementById('af-name').value.trim();
+    const username = document.getElementById('af-login').value.trim();
+    if (!name || !username) { toast('Заполните имя и логин', 'warning'); return null; }
+    return { name, username, password: document.getElementById('af-pass').value, role: document.getElementById('af-role').value, vehicleId: document.getElementById('af-vehicle').value };
+  }
+
+  function renderAdminVehicles() {
+    const stTxt = { idle: 'Простой', en_route: 'В пути', at_site: 'На объекте' };
+    document.getElementById('admin-vehicles-tbody').innerHTML = Data.getVehicles().map(v => {
+      const d = Data.getUserById(v.driverId);
+      return `<tr><td><b>${v.number}</b></td><td>${v.model}</td><td>${d?d.name.split(' ').slice(0,2).join(' '):'—'}</td><td>${stTxt[v.status]||v.status}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-outline btn-sm" onclick="App.adminEditVehicle('${v.id}')">✏️</button>
+          <button class="btn btn-sm" style="background:#E53935;color:#fff;margin-left:4px" onclick="App.adminDeleteVehicle('${v.id}')">🗑️</button>
+        </td></tr>`;
+    }).join('');
+  }
+
+  function adminAddVehicle() {
+    _openAdminForm('+ Добавить технику', _vehicleFormHtml(), () => {
+      const d = _readVehicleForm(); if (!d) return;
+      const veh = Data.addVehicle({ ...d, lat: 52.9578, lng: 63.1283, speed: 0, status: 'idle', heading: 0, fuel: 100 });
+      if (d.driverId) Data.updateUser(d.driverId, { vehicleId: veh.id });
+      toast('✅ Техника добавлена', 'success');
+      closeModal('modal-admin-form'); renderAdminVehicles();
+    });
+  }
+
+  function adminEditVehicle(id) {
+    const v = Data.getVehicleById(id); if (!v) return;
+    _openAdminForm('✏️ Редактировать технику', _vehicleFormHtml(v), () => {
+      const d = _readVehicleForm(); if (!d) return;
+      Data.updateVehicle(id, d);
+      if (d.driverId) Data.updateUser(d.driverId, { vehicleId: id });
+      toast('✅ Сохранено', 'success');
+      closeModal('modal-admin-form'); renderAdminVehicles();
+    });
+  }
+
+  function adminDeleteVehicle(id) {
+    const v = Data.getVehicleById(id);
+    if (!v || !confirm(`Удалить "${v.number}"?`)) return;
+    Data.deleteVehicle(id); toast('Удалено', 'warning'); renderAdminVehicles();
+  }
+
+  function _vehicleFormHtml(v = {}) {
+    return `<div class="form-group"><label>Гос. номер</label><input id="vf-num" value="${v.number||''}" placeholder="А123ВС"></div>
+      <div class="form-group"><label>Модель</label><input id="vf-model" value="${v.model||''}" placeholder="КамАЗ-5320"></div>
+      <div class="form-group"><label>Водитель</label><select id="vf-driver"><option value="">— Не назначен —</option>${Data.getDrivers().map(u=>`<option value="${u.id}"${v.driverId===u.id?' selected':''}>${u.name}</option>`).join('')}</select></div>`;
+  }
+
+  function _readVehicleForm() {
+    const number = document.getElementById('vf-num').value.trim();
+    const model = document.getElementById('vf-model').value.trim();
+    if (!number || !model) { toast('Заполните номер и модель', 'warning'); return null; }
+    return { number, model, driverId: document.getElementById('vf-driver').value || undefined };
+  }
+
+  function renderAdminSites() {
+    document.getElementById('admin-sites-tbody').innerHTML = Data.getSites().map(s => `<tr>
+      <td><b>${s.name}</b></td><td>${s.district}</td><td style="font-size:12px">${s.address}</td><td>${s.geofenceRadius}м</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-outline btn-sm" onclick="App.adminEditSite('${s.id}')">✏️</button>
+        <button class="btn btn-sm" style="background:#E53935;color:#fff;margin-left:4px" onclick="App.adminDeleteSite('${s.id}')">🗑️</button>
+      </td></tr>`).join('');
+  }
+
+  function adminAddSite() {
+    _openAdminForm('+ Добавить площадку', _siteFormHtml(), () => {
+      const d = _readSiteForm(); if (!d) return;
+      Data.addSite(d); toast('✅ Площадка добавлена', 'success');
+      closeModal('modal-admin-form'); renderAdminSites();
+    });
+  }
+
+  function adminEditSite(id) {
+    const s = Data.getSiteById(id); if (!s) return;
+    _openAdminForm('✏️ Редактировать площадку', _siteFormHtml(s), () => {
+      const d = _readSiteForm(); if (!d) return;
+      Data.updateSite(id, d); toast('✅ Сохранено', 'success');
+      closeModal('modal-admin-form'); renderAdminSites();
+    });
+  }
+
+  function adminDeleteSite(id) {
+    const s = Data.getSiteById(id);
+    if (!s || !confirm(`Удалить "${s.name}"?`)) return;
+    Data.deleteSite(id); toast('Удалено', 'warning'); renderAdminSites();
+  }
+
+  function _siteFormHtml(s = {}) {
+    const dists = ['Северный','Центральный','Южный','Западный','Восточный'];
+    return `<div class="form-group"><label>Название</label><input id="sf-name" value="${s.name||''}" placeholder="мкр. Северный, д.5"></div>
+      <div class="form-group"><label>Адрес</label><input id="sf-addr" value="${s.address||''}" placeholder="Полный адрес"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Район</label><select id="sf-district">${dists.map(d=>`<option${s.district===d?' selected':''}>${d}</option>`).join('')}</select></div>
+        <div class="form-group"><label>Радиус (м)</label><input id="sf-radius" type="number" value="${s.geofenceRadius||80}" min="20" max="300"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Широта</label><input id="sf-lat" type="number" step="0.0001" value="${s.lat||52.9578}"></div>
+        <div class="form-group"><label>Долгота</label><input id="sf-lng" type="number" step="0.0001" value="${s.lng||63.1283}"></div>
+      </div>`;
+  }
+
+  function _readSiteForm() {
+    const name = document.getElementById('sf-name').value.trim();
+    const lat = parseFloat(document.getElementById('sf-lat').value);
+    const lng = parseFloat(document.getElementById('sf-lng').value);
+    if (!name || isNaN(lat) || isNaN(lng)) { toast('Заполните название и координаты', 'warning'); return null; }
+    return { name, address: document.getElementById('sf-addr').value.trim()||name, district: document.getElementById('sf-district').value, lat, lng, geofenceRadius: parseInt(document.getElementById('sf-radius').value)||80 };
+  }
+
+  function renderAdminOrders() {
+    document.getElementById('admin-orders-tbody').innerHTML = Data.getOrders()
+      .sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt)).map(o => {
+        const driver = Data.getUserById(o.driverId); const vehicle = Data.getVehicleById(o.vehicleId);
+        const visits = Data.getVisitsByOrder(o.id); const done = visits.filter(v=>v.status==='completed').length;
+        return `<tr><td><b>№${o.number}</b></td><td>${fmtDate(o.date)}</td><td>${o.district}</td>
+          <td>${driver?driver.name.split(' ').slice(0,2).join(' '):'—'}</td><td>${vehicle?vehicle.number:'—'}</td>
+          <td>${done}/${visits.length}</td>
+          <td><span class="badge badge-${o.status==='completed'?'success':o.status==='in_progress'?'warning':'pending'}">${orderStatusLabel(o.status)}</span></td>
+          <td><button class="btn btn-sm" style="background:#E53935;color:#fff" onclick="App.adminDeleteOrder('${o.id}')">🗑️</button></td></tr>`;
+      }).join('');
+  }
+
+  function adminDeleteOrder(id) {
+    const o = Data.getOrderById(id);
+    if (!o || !confirm(`Удалить наряд №${o.number}?`)) return;
+    Data.deleteOrder(id); toast('Наряд удалён', 'warning');
+    renderAdminOrders(); renderAdminStatuses();
+  }
+
+  function renderAdminRoles() {
+    document.getElementById('admin-roles-tbody').innerHTML = Data.getUsers().map(u => `<tr>
+      <td><b>${u.name}</b></td><td><code>${u.username}</code></td><td>${_ROLES[u.role]||u.role}</td>
+      <td><select style="padding:4px 8px;font-size:13px;border:1.5px solid var(--border);border-radius:8px" onchange="App.adminChangeRole('${u.id}',this.value)">
+        ${Object.entries(_ROLES).map(([v,l])=>`<option value="${v}"${u.role===v?' selected':''}>${l}</option>`).join('')}
+      </select></td></tr>`).join('');
+  }
+
+  function adminChangeRole(id, role) {
+    Data.updateUser(id, { role }); toast('✅ Роль обновлена', 'success');
+    renderAdminPersonnel(); renderAdminRoles();
+  }
+
+  function renderAdminStatuses() {
+    document.getElementById('admin-status-tbody').innerHTML = Data.getOrders()
+      .sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt)).map(o => {
+        const driver = Data.getUserById(o.driverId);
+        return `<tr><td><b>№${o.number}</b></td><td>${fmtDate(o.date)}</td>
+          <td>${driver?driver.name.split(' ').slice(0,2).join(' '):'—'}</td>
+          <td><span class="badge badge-${o.status==='completed'?'success':o.status==='in_progress'?'warning':'pending'}">${orderStatusLabel(o.status)}</span></td>
+          <td><select style="padding:4px 8px;font-size:13px;border:1.5px solid var(--border);border-radius:8px" onchange="App.adminChangeOrderStatus('${o.id}',this.value)">
+            ${['pending','in_progress','completed'].map(s=>`<option value="${s}"${o.status===s?' selected':''}>${orderStatusLabel(s)}</option>`).join('')}
+          </select></td></tr>`;
+      }).join('');
+    const sel = document.getElementById('admin-visit-order-sel');
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">— Выберите наряд —</option>' +
+      Data.getOrders().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))
+        .map(o=>`<option value="${o.id}"${o.id===cur?' selected':''}>№${o.number} · ${fmtDate(o.date)} · ${o.district}</option>`).join('');
+  }
+
+  function adminChangeOrderStatus(id, status) {
+    Data.updateOrder(id, { status }); toast('✅ Статус обновлён', 'success'); renderAdminStatuses();
+  }
+
+  function renderAdminVisitStatuses() {
+    const orderId = document.getElementById('admin-visit-order-sel').value;
+    const tbody = document.getElementById('admin-visits-tbody');
+    if (!orderId) { tbody.innerHTML = ''; return; }
+    tbody.innerHTML = Data.getVisitsByOrder(orderId).map(v => {
+      const site = Data.getSiteById(v.siteId);
+      return `<tr><td>${site?site.name:v.siteId}</td>
+        <td><span class="badge badge-${v.status==='completed'?'success':v.status==='in_progress'?'warning':v.status==='skipped'?'danger':'pending'}">${statusLabel(v.status)}</span></td>
+        <td><select style="padding:4px 8px;font-size:13px;border:1.5px solid var(--border);border-radius:8px" onchange="App.adminChangeVisitStatus('${v.id}',this.value)">
+          ${['pending','in_progress','completed','skipped'].map(s=>`<option value="${s}"${v.status===s?' selected':''}>${statusLabel(s)}</option>`).join('')}
+        </select></td></tr>`;
+    }).join('');
+  }
+
+  function adminChangeVisitStatus(id, status) {
+    Data.updateVisit(id, { status }); toast('✅ Статус обновлён', 'success'); renderAdminVisitStatuses();
+  }
+
+  function _openAdminForm(title, html, saveFn) {
+    document.getElementById('admin-form-title').textContent = title;
+    document.getElementById('admin-form-body').innerHTML = html;
+    _adminSaveFn = saveFn;
+    document.getElementById('modal-admin-form').classList.add('show');
+  }
+
+  function adminFormSave() { if (_adminSaveFn) _adminSaveFn(); }
+
   // ─── Real-time UI refresh ────────────────────────────────
   function refreshUI(keys) {
     if (!state.user) return;
@@ -1186,7 +1448,9 @@ const App = (() => {
         const screen = btn.dataset.screen;
         if (!tab || !screen) return;
 
-        if (tab === 'driver-logout' || tab === 'disp-logout' || tab === 'mgr-logout') { logout(); return; }
+        if (tab === 'driver-logout' || tab === 'disp-logout' || tab === 'mgr-logout' || tab === 'admin-logout') { logout(); return; }
+        if (tab === 'disp-admin-open') { initAdmin(state.user); return; }
+        if (tab === 'admin-back') { showScreen('dispatcher'); return; }
         showTab(screen, tab);
 
         // Lazy init maps and data
@@ -1249,7 +1513,12 @@ const App = (() => {
     printReport,
     exportCSV,
     exportExcel,
-    panToVehicle
+    panToVehicle,
+    adminAddUser, adminEditUser, adminDeleteUser,
+    adminAddVehicle, adminEditVehicle, adminDeleteVehicle,
+    adminAddSite, adminEditSite, adminDeleteSite,
+    adminDeleteOrder, adminChangeRole, adminChangeOrderStatus,
+    adminChangeVisitStatus, renderAdminVisitStatuses, adminFormSave
   };
 })();
 

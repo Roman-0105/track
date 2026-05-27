@@ -33,6 +33,7 @@
     <div class="demo-hint">
       <strong>Демо-доступ:</strong>
       <table>
+        <tr><td>Администратор:</td><td>admin / admin</td></tr>
         <tr><td>Диспетчер:</td><td>dispatcher / 1234</td></tr>
         <tr><td>Руководитель:</td><td>manager / 1234</td></tr>
         <tr><td>Водитель 1:</td><td>driver1 / 1234</td></tr>
@@ -167,6 +168,9 @@
     </button>
     <button class="tab-btn" data-tab="disp-violations" data-screen="dispatcher">
       <span class="tab-icon">⚠️</span>Нарушения
+    </button>
+    <button class="tab-btn" data-tab="disp-admin-open" data-screen="dispatcher">
+      <span class="tab-icon">⚙️</span>Управление
     </button>
     <button class="tab-btn" data-tab="disp-logout" data-screen="dispatcher">
       <span class="tab-icon">🚪</span>Выход
@@ -397,9 +401,122 @@
   </div>
 </div>
 
+<!-- ═══════════════════ ADMIN PANEL ═══════════════════ -->
+<div id="screen-admin" class="screen">
+  <header class="app-header">
+    <span class="header-logo">⚙️</span>
+    <div style="flex:1">
+      <h2>Панель управления</h2>
+      <div class="header-sub">Система мониторинга · г. Рудный</div>
+    </div>
+    <div class="header-user">
+      <div class="avatar" id="admin-avatar">А</div>
+      <span class="user-name" id="admin-username"></span>
+    </div>
+  </header>
+  <nav class="tab-nav" style="overflow-x:auto">
+    <button class="tab-btn active" data-tab="admin-personnel" data-screen="admin"><span class="tab-icon">👥</span>Персонал</button>
+    <button class="tab-btn" data-tab="admin-vehicles" data-screen="admin"><span class="tab-icon">🚛</span>Техника</button>
+    <button class="tab-btn" data-tab="admin-sites" data-screen="admin"><span class="tab-icon">📍</span>Маршруты</button>
+    <button class="tab-btn" data-tab="admin-orders" data-screen="admin"><span class="tab-icon">📋</span>Наряды</button>
+    <button class="tab-btn" data-tab="admin-roles" data-screen="admin"><span class="tab-icon">🎭</span>Роли</button>
+    <button class="tab-btn" data-tab="admin-status" data-screen="admin"><span class="tab-icon">🔄</span>Статусы</button>
+    <button class="tab-btn" data-tab="admin-back" data-screen="admin" id="admin-back-btn" style="display:none"><span class="tab-icon">🏠</span>Назад</button>
+    <button class="tab-btn" data-tab="admin-logout" data-screen="admin"><span class="tab-icon">🚪</span>Выход</button>
+  </nav>
+
+  <!-- Персонал -->
+  <div class="tab-content active" id="tab-admin-personnel">
+    <div class="content-area">
+      <div class="card">
+        <div class="card-header"><h3>👥 Персонал</h3><button class="btn btn-primary btn-sm" onclick="App.adminAddUser()">+ Добавить</button></div>
+        <div class="table-wrap"><table><thead><tr><th>Имя</th><th>Логин</th><th>Роль</th><th>ТС</th><th></th></tr></thead><tbody id="admin-personnel-tbody"></tbody></table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Техника -->
+  <div class="tab-content" id="tab-admin-vehicles">
+    <div class="content-area">
+      <div class="card">
+        <div class="card-header"><h3>🚛 Техника</h3><button class="btn btn-primary btn-sm" onclick="App.adminAddVehicle()">+ Добавить</button></div>
+        <div class="table-wrap"><table><thead><tr><th>Номер</th><th>Модель</th><th>Водитель</th><th>Статус</th><th></th></tr></thead><tbody id="admin-vehicles-tbody"></tbody></table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Маршруты -->
+  <div class="tab-content" id="tab-admin-sites">
+    <div class="content-area">
+      <div class="card">
+        <div class="card-header"><h3>📍 Контейнерные площадки</h3><button class="btn btn-primary btn-sm" onclick="App.adminAddSite()">+ Добавить</button></div>
+        <div class="table-wrap"><table><thead><tr><th>Название</th><th>Район</th><th>Адрес</th><th>Радиус</th><th></th></tr></thead><tbody id="admin-sites-tbody"></tbody></table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Наряды -->
+  <div class="tab-content" id="tab-admin-orders">
+    <div class="content-area">
+      <div class="card">
+        <div class="card-header"><h3>📋 Все наряды</h3></div>
+        <div class="table-wrap"><table><thead><tr><th>№</th><th>Дата</th><th>Район</th><th>Водитель</th><th>ТС</th><th>Выполн.</th><th>Статус</th><th></th></tr></thead><tbody id="admin-orders-tbody"></tbody></table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Роли -->
+  <div class="tab-content" id="tab-admin-roles">
+    <div class="content-area">
+      <div class="card">
+        <div class="card-header"><h3>🎭 Управление ролями</h3></div>
+        <div class="table-wrap"><table><thead><tr><th>Сотрудник</th><th>Логин</th><th>Текущая роль</th><th>Изменить роль</th></tr></thead><tbody id="admin-roles-tbody"></tbody></table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Статусы -->
+  <div class="tab-content" id="tab-admin-status">
+    <div class="content-area">
+      <div class="card">
+        <div class="card-header"><h3>🔄 Статусы нарядов</h3></div>
+        <div class="table-wrap"><table><thead><tr><th>Наряд</th><th>Дата</th><th>Водитель</th><th>Статус</th><th>Изменить</th></tr></thead><tbody id="admin-status-tbody"></tbody></table></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <div class="card-header"><h3>🔄 Статусы визитов</h3></div>
+        <div class="card-body">
+          <div class="form-group"><label>Выберите наряд</label>
+            <select id="admin-visit-order-sel" onchange="App.renderAdminVisitStatuses()"><option value="">— Выберите наряд —</option></select>
+          </div>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Площадка</th><th>Статус</th><th>Изменить</th></tr></thead><tbody id="admin-visits-tbody"></tbody></table></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Admin Form -->
+<div class="modal-overlay" id="modal-admin-form">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h3 id="admin-form-title">Редактирование</h3>
+      <button class="btn-icon" onclick="App.closeModal('modal-admin-form')">✕</button>
+    </div>
+    <div class="modal-body" id="admin-form-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline btn-sm" onclick="App.closeModal('modal-admin-form')">Отмена</button>
+      <button class="btn btn-primary btn-sm" onclick="App.adminFormSave()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// Fix: willReadFrequently warning from leaflet-heat
+(function(){var o=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(t,a){return o.call(this,t,t==='2d'?Object.assign({willReadFrequently:true},a):a);};})();
+</script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
